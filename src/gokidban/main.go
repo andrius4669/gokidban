@@ -69,7 +69,7 @@ type record struct {
 	Added      string            `json:"added,omitempty"`
 	Whois      string            `json:"whois,omitempty"`
 	WhoisDate  string            `json:"whois_date,omitempty"`
-	PDB        string            `json:"pdb,omitempty"`
+	PDB        interface{}       `json:"pdb,omitempty"`
 	PDBDate    string            `json:"pdb_date,omitempty"`
 	Ranges     []string          `json:"ranges,omitempty"`
 	RangesOrg  map[string]string `json:"ranges_org,omitempty"`
