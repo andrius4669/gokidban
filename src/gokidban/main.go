@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/oschwald/geoip2-golang"
@@ -30,10 +32,19 @@ type rangeinfo struct {
 
 var asn2ranges map[uint32][]rangeinfo
 
-func do_asn2range(r *maxminddb.Reader) {
+var spinner = [4]byte{'/', '-', '\\', '|'}
+
+func do_asn2range(r *maxminddb.Reader, pf io.Writer) {
+
 	asn2ranges = make(map[uint32][]rangeinfo)
 	n_it := r.Networks()
+
+	spinidx := 0
+
 	for n_it.Next() {
+
+		spinidx = dospin(spinidx, pf)
+
 		var as geoip2.ASN
 		nr, err := n_it.Network(&as)
 		if err != nil {
@@ -55,9 +66,9 @@ func do_asn2range(r *maxminddb.Reader) {
 }
 
 func do_asn2range_print(gr *maxminddb.Reader) {
-	fmt.Fprintf(os.Stderr, "making ASN->ranges mapping...")
-	do_asn2range(gr)
-	fmt.Fprintf(os.Stderr, " done.\n")
+	fmt.Fprintf(os.Stderr, "making ASN->ranges mapping... ")
+	do_asn2range(gr, os.Stderr)
+	fmt.Fprintf(os.Stderr, "done.\n")
 }
 
 func getASN(r *maxminddb.Reader, ipAddress net.IP) (asn geoip2.ASN, err error) {
@@ -211,6 +222,22 @@ func loadrecord(fullpath string) (rec record) {
 	return
 }
 
+var nextspin time.Time
+
+func dospin(idx int, w io.Writer) int {
+	if time.Now().Before(nextspin) {
+		return idx
+	}
+
+	if nextspin.IsZero() {
+		nextspin = time.Now()
+	}
+	nextspin = nextspin.Add(35 * time.Millisecond)
+
+	fmt.Fprintf(w, "%c\010", spinner[idx])
+	return (idx + 1) & 0x03
+}
+
 func rerange() {
 	gr, err := maxminddb.Open(cfg.MMDBASN)
 	if err != nil {
@@ -220,10 +247,14 @@ func rerange() {
 
 	do_asn2range_print(gr)
 
+	spinidx := 0
+
 	rerangeone := func(fullpath, fname string) {
 		if fname == "" || fname[0] == '.' {
 			return
 		}
+
+		spinidx = dospin(spinidx, os.Stderr)
 
 		asn64, err := strconv.ParseUint(fname, 10, 32)
 		if err != nil {
@@ -236,13 +267,13 @@ func rerange() {
 		dumprecord(fullpath, &rec)
 	}
 
-	fmt.Fprintf(os.Stderr, "reranging...")
+	fmt.Fprintf(os.Stderr, "reranging... ")
 
 	iterateDirNumNoerr("db/dunno", rerangeone)
 	iterateDirNumNoerr("db/kids", rerangeone)
 	iterateDirNumNoerr("db/sirs", rerangeone)
 
-	fmt.Fprintf(os.Stderr, " done.\n")
+	fmt.Fprintf(os.Stderr, "done.\n")
 }
 
 func main() {
