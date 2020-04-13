@@ -222,16 +222,13 @@ func loadrecord(fullpath string) (rec record) {
 	return
 }
 
-var nextspin time.Time
+var nextspin = time.Now()
 
 func dospin(idx int, w io.Writer) int {
 	if time.Now().Before(nextspin) {
 		return idx
 	}
 
-	if nextspin.IsZero() {
-		nextspin = time.Now()
-	}
 	nextspin = nextspin.Add(35 * time.Millisecond)
 
 	fmt.Fprintf(w, "%c\010", spinner[idx])
