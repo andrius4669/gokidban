@@ -39,11 +39,11 @@ func do_asn2range(r *maxminddb.Reader, pf io.Writer) {
 	asn2ranges = make(map[uint32][]rangeinfo)
 	n_it := r.Networks()
 
-	spinidx := 0
+	ss := newspinstate()
 
 	for n_it.Next() {
 
-		spinidx = dospin(spinidx, pf)
+		ss.dospin(pf)
 
 		var as geoip2.ASN
 		nr, err := n_it.Network(&as)
@@ -222,17 +222,24 @@ func loadrecord(fullpath string) (rec record) {
 	return
 }
 
-var nextspin = time.Now()
+type spinstate struct {
+	nextspin time.Time
+	spinidx  int
+}
 
-func dospin(idx int, w io.Writer) int {
-	if time.Now().Before(nextspin) {
-		return idx
+func newspinstate() spinstate {
+	return spinstate{nextspin: time.Now()}
+}
+
+func (s *spinstate) dospin(w io.Writer) {
+	if time.Now().Before(s.nextspin) {
+		return
 	}
 
-	nextspin = nextspin.Add(35 * time.Millisecond)
+	s.nextspin = s.nextspin.Add(35 * time.Millisecond)
 
-	fmt.Fprintf(w, "%c\010", spinner[idx])
-	return (idx + 1) & 0x03
+	fmt.Fprintf(w, "%c\010", spinner[s.spinidx])
+	s.spinidx = (s.spinidx + 1) & 0x03
 }
 
 func rerange() {
@@ -244,14 +251,14 @@ func rerange() {
 
 	do_asn2range_print(gr)
 
-	spinidx := 0
+	ss := newspinstate()
 
 	rerangeone := func(fullpath, fname string) {
 		if fname == "" || fname[0] == '.' {
 			return
 		}
 
-		spinidx = dospin(spinidx, os.Stderr)
+		ss.dospin(os.Stderr)
 
 		asn64, err := strconv.ParseUint(fname, 10, 32)
 		if err != nil {
